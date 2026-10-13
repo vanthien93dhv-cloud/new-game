@@ -1,0 +1,498 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Snake Game</title>
+<style>
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+    min-height: 100dvh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #101827;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    padding: 16px;
+}
+.game {
+    width: min(100%, 430px);
+    text-align: center;
+}
+h1 {
+    margin: 0 0 18px;
+    color: #69f0ae;
+    font-size: 32px;
+}
+.stats {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.stat {
+    flex: 1;
+    background: #202d40;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 14px;
+}
+.stat strong {
+    display: block;
+    color: #69f0ae;
+    font-size: 23px;
+    margin-top: 5px;
+}
+.board-wrap {
+    position: relative;
+    width: 100%;
+    border: 3px solid #33465b;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #0b1220;
+}
+canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    touch-action: none;
+}
+.overlay {
+    position: absolute;
+    inset: 0;
+    background: #08111bdc;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+.overlay h2 {
+    font-size: 30px;
+    margin: 0 0 10px;
+}
+.overlay p {
+    line-height: 1.6;
+    color: #d3deeb;
+}
+.hidden {
+    display: none;
+}
+button {
+    border: 0;
+    cursor: pointer;
+    font-weight: bold;
+    -webkit-tap-highlight-color: transparent;
+}
+.main-btn {
+    padding: 14px 28px;
+    background: #69f0ae;
+    color: #10251c;
+    border-radius: 12px;
+    font-size: 17px;
+    margin-top: 10px;
+}
+.controls {
+    display: grid;
+    grid-template-columns: repeat(3, 64px);
+    grid-template-rows: repeat(2, 54px);
+    justify-content: center;
+    gap: 8px;
+    margin: 20px auto 14px;
+}
+.controls button {
+    background: #26364c;
+    color: white;
+    border-radius: 12px;
+    font-size: 25px;
+    touch-action: manipulation;
+}
+.controls button:active {
+    background: #69f0ae;
+    color: #10251c;
+}
+.up { grid-column: 2; grid-row: 1; }
+.left { grid-column: 1; grid-row: 2; }
+.down { grid-column: 2; grid-row: 2; }
+.right { grid-column: 3; grid-row: 2; }
+.hint {
+    color: #a8b8cc;
+    font-size: 13px;
+    line-height: 1.6;
+}
+</style>
+</head>
+<body>
+
+<div class="game">
+    <h1>🐍 Snake Game</h1>
+
+    <div class="stats">
+        <div class="stat">
+            ĐIỂM
+            <strong id="score">0</strong>
+        </div>
+        <div class="stat">
+            KỶ LỤC
+            <strong id="best">0</strong>
+        </div>
+    </div>
+
+    <div class="board-wrap">
+        <canvas id="board" width="400" height="400"></canvas>
+
+        <div class="overlay" id="overlay">
+            <h2 id="overlayTitle">🐍 Rắn săn mồi</h2>
+            <p id="overlayText">
+                Ăn táo để rắn dài hơn.<br>
+                Đừng đâm vào tường hoặc chính mình!
+            </p>
+            <button class="main-btn" id="startBtn">BẮT ĐẦU</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="up" data-dir="up" aria-label="Đi lên">▲</button>
+        <button class="left" data-dir="left" aria-label="Đi trái">◀</button>
+        <button class="down" data-dir="down" aria-label="Đi xuống">▼</button>
+        <button class="right" data-dir="right" aria-label="Đi phải">▶</button>
+    </div>
+
+    <p class="hint">
+        Điện thoại: chạm các nút điều khiển.<br>
+        Máy tính: dùng phím mũi tên hoặc WASD.
+    </p>
+</div>
+
+<script>
+(() => {
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const bestEl = document.getElementById('best');
+    const overlay = document.getElementById('overlay');
+    const titleEl = document.getElementById('overlayTitle');
+    const textEl = document.getElementById('overlayText');
+    const startBtn = document.getElementById('startBtn');
+
+    const SIZE = 20;
+    const CELLS = canvas.width / SIZE;
+
+    let snake = [];
+    let food = {};
+    let direction = { x: 1, y: 0 };
+    let nextDirection = { x: 1, y: 0 };
+    let score = 0;
+    let best = 0;
+    let state = 'ready';
+    let timer = null;
+
+    try {
+        best = Number(localStorage.getItem('snakeBest')) || 0;
+    } catch (e) {}
+
+    bestEl.textContent = best;
+
+    function randomFood() {
+        let position;
+        do {
+            position = {
+                x: Math.floor(Math.random() * CELLS),
+                y: Math.floor(Math.random() * CELLS)
+            };
+        } while (
+            snake.some(part =>
+                part.x === position.x && part.y === position.y
+            )
+        );
+
+        food = position;
+    }
+
+    function reset() {
+        snake = [
+            { x: 8, y: 10 },
+            { x: 7, y: 10 },
+            { x: 6, y: 10 }
+        ];
+
+        direction = { x: 1, y: 0 };
+        nextDirection = { x: 1, y: 0 };
+        score = 0;
+        scoreEl.textContent = score;
+        randomFood();
+        draw();
+    }
+
+    function start() {
+        clearInterval(timer);
+        reset();
+
+        state = 'playing';
+        overlay.classList.add('hidden');
+
+        // Tốc độ tăng nhẹ theo điểm
+        timer = setInterval(tick, 115);
+    }
+
+    function gameOver() {
+        if (state !== 'playing') return;
+
+        state = 'over';
+        clearInterval(timer);
+
+        if (score > best) {
+            best = score;
+            bestEl.textContent = best;
+
+            try {
+                localStorage.setItem('snakeBest', best);
+            } catch (e) {}
+        }
+
+        titleEl.textContent = '💥 Game Over!';
+        textEl.innerHTML =
+            'Điểm của mi: <b>' + score + '</b><br>' +
+            'Kỷ lục: <b>' + best + '</b>';
+
+        startBtn.textContent = 'CHƠI LẠI';
+        overlay.classList.remove('hidden');
+        draw();
+    }
+
+    function setDirection(name) {
+        if (state !== 'playing') return;
+
+        const dirs = {
+            up:    { x: 0, y: -1 },
+            down:  { x: 0, y: 1 },
+            left:  { x: -1, y: 0 },
+            right: { x: 1, y: 0 }
+        };
+
+        const wanted = dirs[name];
+        if (!wanted) return;
+
+        // Không cho rắn quay đầu 180 độ
+        if (
+            wanted.x === -direction.x &&
+            wanted.y === -direction.y
+        ) {
+            return;
+        }
+
+        nextDirection = wanted;
+    }
+
+    function tick() {
+        if (state !== 'playing') return;
+
+        direction = nextDirection;
+
+        const head = {
+            x: snake[0].x + direction.x,
+            y: snake[0].y + direction.y
+        };
+
+        // Đâm tường
+        if (
+            head.x < 0 || head.x >= CELLS ||
+            head.y < 0 || head.y >= CELLS
+        ) {
+            gameOver();
+            return;
+        }
+
+        const eating =
+            head.x === food.x && head.y === food.y;
+
+        // Nếu không ăn, đuôi sẽ rời vị trí cũ trong lượt này.
+        const bodyToCheck = eating
+            ? snake
+            : snake.slice(0, -1);
+
+        // Đâm vào thân
+        if (bodyToCheck.some(part =>
+            part.x === head.x && part.y === head.y
+        )) {
+            gameOver();
+            return;
+        }
+
+        snake.unshift(head);
+
+        if (eating) {
+            score += 10;
+            scoreEl.textContent = score;
+            randomFood();
+
+            // Tăng tốc dần nhưng giới hạn tốc độ tối đa
+            clearInterval(timer);
+            timer = setInterval(
+                tick,
+                Math.max(55, 115 - Math.floor(score / 50) * 5)
+            );
+        } else {
+            snake.pop();
+        }
+
+        draw();
+    }
+
+    function drawGrid() {
+        ctx.fillStyle = '#0b1220';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = '#19273a';
+        ctx.lineWidth = 1;
+
+        for (let i = 0; i <= CELLS; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * SIZE, 0);
+            ctx.lineTo(i * SIZE, canvas.height);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, i * SIZE);
+            ctx.lineTo(canvas.width, i * SIZE);
+            ctx.stroke();
+        }
+    }
+
+    function roundedCell(x, y, color, inset = 2) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(
+            x * SIZE + inset,
+            y * SIZE + inset,
+            SIZE - inset * 2,
+            SIZE - inset * 2,
+            5
+        );
+        ctx.fill();
+    }
+
+    function drawFood() {
+        const cx = food.x * SIZE + SIZE / 2;
+        const cy = food.y * SIZE + SIZE / 2;
+
+        // Táo
+        ctx.fillStyle = '#ff5364';
+        ctx.beginPath();
+        ctx.arc(cx, cy + 2, 7, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#7bf09b';
+        ctx.beginPath();
+        ctx.ellipse(cx + 4, cy - 6, 4, 2.5, -.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#d5b17b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 3);
+        ctx.lineTo(cx + 1, cy - 7);
+        ctx.stroke();
+    }
+
+    function drawSnake() {
+        snake.forEach((part, index) => {
+            roundedCell(
+                part.x,
+                part.y,
+                index === 0 ? '#a3ffcb' : '#36d889',
+                index === 0 ? 1 : 2
+            );
+        });
+
+        // Mắt rắn theo hướng di chuyển
+        const head = snake[0];
+        if (!head) return;
+
+        ctx.fillStyle = '#10251c';
+
+        const eyePositions = direction.x !== 0
+            ? [
+                { x: head.x * SIZE + 12, y: head.y * SIZE + 6 },
+                { x: head.x * SIZE + 12, y: head.y * SIZE + 14 }
+            ]
+            : [
+                { x: head.x * SIZE + 6, y: head.y * SIZE + 12 },
+                { x: head.x * SIZE + 14, y: head.y * SIZE + 12 }
+            ];
+
+        eyePositions.forEach(eye => {
+            ctx.beginPath();
+            ctx.arc(eye.x, eye.y, 1.8, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function draw() {
+        drawGrid();
+        drawFood();
+        drawSnake();
+    }
+
+    document.querySelectorAll('[data-dir]').forEach(button => {
+        button.addEventListener('pointerdown', event => {
+            event.preventDefault();
+            setDirection(button.dataset.dir);
+        });
+    });
+
+    document.addEventListener('keydown', event => {
+        const keys = {
+            ArrowUp: 'up',
+            KeyW: 'up',
+            ArrowDown: 'down',
+            KeyS: 'down',
+            ArrowLeft: 'left',
+            KeyA: 'left',
+            ArrowRight: 'right',
+            KeyD: 'right'
+        };
+
+        if (keys[event.code]) {
+            event.preventDefault();
+            setDirection(keys[event.code]);
+        }
+    });
+
+    // Vuốt trên bảng game để đổi hướng
+    let touchX = 0;
+    let touchY = 0;
+
+    canvas.addEventListener('pointerdown', event => {
+        touchX = event.clientX;
+        touchY = event.clientY;
+    });
+
+    canvas.addEventListener('pointerup', event => {
+        const dx = event.clientX - touchX;
+        const dy = event.clientY - touchY;
+
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+
+        if (Math.abs(dx) > Math.abs(dy)) {
+            setDirection(dx > 0 ? 'right' : 'left');
+        } else {
+            setDirection(dy > 0 ? 'down' : 'up');
+        }
+    });
+
+    startBtn.addEventListener('click', start);
+
+    reset();
+})();
+</script>
+
+</body>
+</html>
